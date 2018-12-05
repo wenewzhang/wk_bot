@@ -10,7 +10,9 @@
     ssl,
     uuid,
     quickrand,
-    jwt
+    jwt,
+    gun,
+    websocket_client
    ]},
   {env,[]},
   {modules, []},

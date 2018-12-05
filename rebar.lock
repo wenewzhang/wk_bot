@@ -6,17 +6,21 @@
   {git,"https://github.com/davisp/jiffy.git",
        {ref,"ee8b48cb448a999e1fddbb5e2e32e7dfe33acf5c"}},
   0},
- {<<"jsx">>,{pkg,<<"jsx">>,<<"2.8.3">>},1},
- {<<"jwt">>,{pkg,<<"jwt">>,<<"0.1.6">>},0},
+ {<<"jsx">>,{pkg,<<"jsx">>,<<"2.8.0">>},1},
+ {<<"jwt">>,
+  {git,"https://github.com/wenewzhang/jwt",
+       {ref,"1aa49e101716cfc55bebc5b979fd2d9ba78636c8"}},
+  0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"1.7.4">>},1},
- {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"1.7.4">>},0}]}.
+ {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"1.7.4">>},0},
+ {<<"websocket_client">>,{pkg,<<"websocket_client">>,<<"1.3.0">>},0}]}.
 [
 {pkg_hash,[
  {<<"base64url">>, <<"36A90125F5948E3AFD7BE97662A1504B934DD5DAC78451CA6E9ABF85A10286BE">>},
  {<<"cowlib">>, <<"8AA629F81A0FC189F261DC98A42243FA842625FEEA3C7EC56C48F4CCDB55490F">>},
  {<<"gun">>, <<"18E5D269649C987AF95AEC309F68A27FFC3930531DD227A6EAA0884D6684286E">>},
- {<<"jsx">>, <<"A05252D381885240744D955FBE3CF810504EB2567164824E19303EA59EEF62CF">>},
- {<<"jwt">>, <<"F080AB90EED51B1159E43CF775277BD30AEDA85033AE2D278B4FFCAA32FF14B7">>},
+ {<<"jsx">>, <<"749BEC6D205C694AE1786D62CEA6CC45A390437E24835FD16D12D74F07097727">>},
  {<<"quickrand">>, <<"F91F34469D6AC153B951BB34DD9C78029882426BD61E12B85E5EE465850C08ED">>},
- {<<"uuid">>, <<"4EC01367FEDFBAEEB9D9BC88B2D239D42CE5B53AD284741262F86B71EB82FBFA">>}]}
+ {<<"uuid">>, <<"4EC01367FEDFBAEEB9D9BC88B2D239D42CE5B53AD284741262F86B71EB82FBFA">>},
+ {<<"websocket_client">>, <<"2275D7DAAA1CDACEBF2068891C9844B15F4FDC3DE3EC2602420C2FB486DB59B6">>}]}
 ].

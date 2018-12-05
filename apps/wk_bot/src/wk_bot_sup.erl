@@ -12,8 +12,8 @@
 
 %% Supervisor callbacks
 -export([init/1]).
--export([p/0]).
-
+-export([p/0,ws/0,c/0]).
+-export([connection/1]).
 -define(SERVER, ?MODULE).
 -define(CLIENT_ID,<<"21042518-85c7-4903-bb19-f311813d1f51">>).
 -define(CLIENT_SECRET,<<"8cc112e77c25457e287b39c786b4e29edd2035a9deb2f658e17c99d56fdfb13a">>).
@@ -60,7 +60,10 @@ start_link() ->
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
     quickrand:seed(),
-    {ok, {{one_for_all, 0, 1}, []}}.
+    Specs = [
+    spec(wk_websocket)
+    ],
+    {ok, {{one_for_all, 0, 1}, Specs}}.
 
 signAuthenticationToken(Uid,Sid,PrvKey,Method,Uri) ->
   Iat = os:system_time(seconds),
@@ -85,11 +88,46 @@ signAuthenticationToken(Uid,Sid,PrvKey,Method,Uri) ->
   io:format("sign data:~p~n",[SignDt]),
   SignDt.
 
+c()->
+  {ok,Token} = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
+  case gun:open("blaze.mixin.one",443,#{transport => tls}) of
+  {ok, ConnPid} ->
+    io:format("connected"),
+    Header = [{<<"subprotocols">>,"Mixin-Blaze-1"},{<<"header">>,"Authorization:Bearer " ++ Token}],
+    io:format("Header:~p~n",[Header]),
+    SteamRef = gun:head(ConnPid,"/",Header),
+    io:format("steam ~n"),
+    Msg = [{<<"id">>,uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))},{<<"action">>,"LIST_PENDING_MESSAGES"}],
+    MsgB = iolist_to_binary(Msg),
+    io:format("msg b",[MsgB]),
+    gun:ws_send(ConnPid, MsgB);
+  {error, Reason} ->
+      io:format("error :~p~n",[Reason])
+  end.
+
+
 p()->
     % {_,Key,_} = public_key:pem_decode(?PRIVATE_KEY),
     % io:format("Key data:~p",Key),
-    signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
-    ok.
+    {ok,Token} = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
+    {ok, ConnPid} = gun:open("blaze.mixin.one", 443,#{transport => tls}),
+    gun:ws_send(ConnPid,iolist_to_binary([
+    <<"Authorization:">>, <<"Bearer ">>,Token,<<"Mixin-Blaze-1">>])).
+    % gun:ws_upgrade(ConnPid, "/websocket", [
+    % {<<"Authorization">>, "Bearer " ++ Token}]),
+    % % TokenN = {"Authorization",{"Bearer ",Token}},
+    % % gun:request(ConnPid,<<"POST">>,"/",TokenN),
+    % receive
+    %     {gun_upgrade, ConnPid, StreamRef, [<<"websocket">>], Headers} ->
+    %         upgrade_success(ConnPid, StreamRef);
+    %     {gun_response, ConnPid, _, _, Status, Headers} ->
+    %         exit({ws_upgrade_failed, Status, Headers});
+    %     {gun_error, ConnPid, StreamRef, Reason} ->
+    %         exit({ws_upgrade_failed, Reason})
+    %     %% More clauses here as needed.
+    % after 1000 ->
+    %     exit(timeout)
+    % end.
 
 to_hex([]) ->
     [];
@@ -103,3 +141,96 @@ to_digit(N)             -> $a + N-10.
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+ws() ->
+    % {ok, _} = application:ensure_all_started(gun),
+    {ok, ConnPid} = gun:open("blaze.mixin.one", 443),
+    case gun:await_up(ConnPid) of
+    % gun:ws_upgrade(ConnPid, "/websocket"),
+     {ok, Protocol} ->
+       io:format("await_up:~p~n",[Protocol]);
+    {error, Reason} ->
+        io:format("error :~p~n",[Reason])
+    end,
+    % receive
+    % {gun_ws_upgrade, ConnPid, ok, Headers} ->
+    %         upgrade_success(ConnPid, Headers);
+    % {gun_response, ConnPid, _, _, Status, Headers} ->
+    %         exit({ws_upgrade_failed, Status, Headers});
+    % {gun_error, _ConnPid, _StreamRef, Reason} ->
+    %         exit({ws_upgrade_failed, Reason})
+    % %% More clauses here as needed.
+    % after 1000 ->
+    %     exit(timeout)
+    % end,
+
+    gun:shutdown(ConnPid).
+
+
+upgrade_success(ConnPid, Headers) ->
+    io:format("Upgraded ~w. Success!~nHeaders:~n~p~n",
+              [ConnPid, Headers]),
+
+    gun:ws_send(ConnPid, {text, "It's raining!"}),
+    receive
+        {gun_ws, ConnPid, {text, Msg} } ->
+            io:format("~s~n", [Msg])
+    end.
+
+
+connection(State) ->
+ receive
+  start ->
+   #{host := Host,port := Port} = State,
+   {ok,WPID} = gun:open(Host,Port),
+   connection(State#{wpid => WPID});
+  {gun_up,WPID,_Proto} ->
+   #{path := Path} = State,
+   gun:ws_upgrade(WPID,Path,[],#{compress => true}),
+   connection(State);
+  {gun_down,_WPID,ws,closed,_,_} ->
+   connection(State);
+  {gun_ws_upgrade,_WPID,ok,_Data} ->
+   connection(State);
+  {gun_response, _WPID, _Ref, _Code, _HttpStatusCode, _Headers} ->
+   connection(State);
+  {gun_error, _WPID, _Ref, _Reason} ->
+   connection(State);
+  {'DOWN',_PID,process,_WPID,_Reason} ->
+   connection(State);
+  {gun_ws, _WPID, Frame} ->
+   case Frame of
+    close ->
+     self() ! stop;
+    {close,_Code,_Message} ->
+     self() ! stop;
+    {text,TextData} ->
+     io:format("Received Text Frame: ~p~n",[TextData]);
+    {binary,BinData} ->
+     io:format("Received Binary Frame: ~p~n",[BinData]);
+    _ ->
+     io:format("Received Unhandled Frame: ~p~n",[Frame])
+   end,
+   connection(State);
+  stop ->
+   #{wpid := WPID} = State,
+   gun:flush(WPID),
+   gun:shutdown(WPID);
+  Message ->
+   io:format("Received Unknown Message on Gun: ~p~n",[Message]),
+   connection(State)
+ after 30 * 1000 ->
+  Socket = maps:get(wpid,State,notfound),
+  case Socket of
+   notfound ->
+    ok;
+   _ ->
+    gun:ws_send(Socket,ping)
+  end,
+  connection(State)
+end.
+
+%%====================================================================
+%% Internal functions
+%%====================================================================
+spec(M) -> {M, {M, start_link, []}, permanent, brutal_kill, worker, [M]}.
