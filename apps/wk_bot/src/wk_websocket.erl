@@ -46,7 +46,7 @@ P6/TWWEt58rw439m54UCQQDN0F6oGJzR/RX6FhEpt6zge+8Kpv6IaeHbUpQ0uaEp
 TTi81xsOsJoFhTUOyzsQVA2doGV7D9ptfekMCeJrbabM
 -----END RSA PRIVATE KEY-----
 ">>).
--define(PTL_LIST_PENDING_MESSAGES,"'id':'~s','action':'LIST_PENDING_MESSAGES'").
+-define(PTL_LIST_PENDING_MESSAGES,"id:~s,action:LIST_PENDING_MESSAGES").
 %%====================================================================
 %% API
 %%====================================================================
@@ -69,29 +69,41 @@ start_link() ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([]) ->
-  {ok, ConnPid} = gun:open("blaze.mixin.one", 443),
-  case gun:await_up(ConnPid) of
-  % gun:ws_upgrade(ConnPid, "/websocket"),
-  {ok, Protocol} ->
-     io:format("await_up:~p~n",[Protocol]),
-     io:format("connected"),
-     Token = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
-     Header = [
-              {<<"'subprotocols':">>,<<"['Mixin-Blaze-1']">>},
-              {<<"'header':">>,iolist_to_binary([<<"['Authorization:Bearer ">>,Token,<<"']">>])}
-              ],
-     io:format("Header:~p~n",[Header]),
-     SteamRef = gun:head(ConnPid,"/",Header),
-     Msg = io_lib:format(?PTL_LIST_PENDING_MESSAGES,[uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))]),
-     % Msg = ["id",uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))},{"action","LIST_PENDING_MESSAGES"}],
-     io:format("msg ~p~n",[Msg]),
-     MsgB = zlib:gzip(iolist_to_binary(Msg)),
-     io:format("msg b:~p~n",[MsgB]),
-     gun:ws_send(ConnPid, MsgB);
-  {error, Reason} ->
-      io:format("error :~p~n",[Reason])
-  end,
-  decode_python_data(?PRIVATE_KEY),
+  % Token = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
+  % Header = [{<<"Upgrade">>,<<"websocket">>},
+  %           {<<"Connection">>,<<"Upgrade">>},
+  %           {<<"Sec-WebSocket-Key">>,<<"Q+0VrkMrRk/ymTOLNcc9xw==">>},
+  %           {<<"Sec-WebSocket-Protocol">>,<<"Mixin-Blaze-1">>},
+  %           {<<"Sec-WebSocket-Version">>,<<"13">>},
+  %           {<<"Authorization">>,iolist_to_binary([<<"Bearer ">>,Token])}],
+  % io:format("Header:~p~n",[Header]),
+  % SteamRef = gun:get(ConnPid,"/",Header),
+  {ok, ConnPid} = gun:open("blaze.mixin.one", 443,#{transport => tls,protocols =>[http]}),
+  % {ok, ConnPid} = gun:open("127.0.0.1", 80),
+  % case gun:await_up(ConnPid) of
+  % % gun:ws_upgrade(ConnPid, "/websocket"),
+  % {ok, Protocol} ->
+  %    io:format("await_up:~p~n",[Protocol]),
+  %    io:format("connected"),
+  %    Token = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
+  %    Header = [{<<"Upgrade">>,<<"websocket">>},
+  %             {<<"Connection">>,<<"Upgrade">>},
+  %             {<<"Sec-WebSocket-Key">>,<<"Q+0VrkMrRk/ymTOLNcc9xw==">>},
+  %             {<<"Sec-WebSocket-Protocol">>,<<"Mixin-Blaze-1">>},
+  %             {<<"Sec-WebSocket-Version">>,<<"13">>},
+  %             {<<"Authorization">>,iolist_to_binary([<<"Bearer ">>,Token])}],
+  %    io:format("Header:~p~n",[Header]),
+  %    SteamRef = gun:get(ConnPid,"/",Header),
+  %    Msg = io_lib:format(?PTL_LIST_PENDING_MESSAGES,[uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))]),
+  %    % Msg = ["id",uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))},{"action","LIST_PENDING_MESSAGES"}],
+  %    io:format("msg ~p~n",[Msg]),
+  %    MsgB = zlib:gzip(iolist_to_binary(Msg)),
+  %    io:format("msg b:~p~n",[MsgB]),
+  %    gun:ws_send(ConnPid, MsgB);
+  % {error, Reason} ->
+  %     io:format("error :~p~n",[Reason])
+  % end,
+  % decode_python_data(?PRIVATE_KEY),
   {ok, #state{conn = ConnPid}}.
 
 %%--------------------------------------------------------------------
@@ -103,8 +115,9 @@ init([]) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
+handle_call(Request, _From, State) ->
   Reply = ok,
+  io:format("handle call:~p~n",[Request]),
   {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
@@ -113,7 +126,8 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
+handle_cast(Msg, State) ->
+  io:format("handle cast:~p~n",[Msg]),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -122,7 +136,26 @@ handle_cast(_Msg, State) ->
 %%                                       {stop, Reason, State}
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info({gun_up,ConnPid,HttpVersion}, State) ->
+  % io:format("handle info:~p~n",[Info]),
+  Token = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
+  Header = [{<<"Upgrade">>,<<"websocket">>},
+            {<<"Connection">>,<<"Upgrade">>},
+            {<<"Sec-WebSocket-Key">>,<<"Q+0VrkMrRk/ymTOLNcc9xw==">>},
+            {<<"Sec-WebSocket-Protocol">>,<<"Mixin-Blaze-1">>},
+            {<<"Sec-WebSocket-Version">>,<<"13">>},
+            {<<"Authorization">>,iolist_to_binary([<<"Bearer ">>,Token])}],
+  io:format("Header:~p HttpVersion:~p~n",[Header,HttpVersion]),
+  % SteamRef = gun:get(ConnPid,"/",Header),
+  gun:ws_upgrade(ConnPid, "/",Header),
+  {noreply, State#state{conn = ConnPid}};
+
+handle_info({gun_error,_,_,Reason},State) ->
+  io:format("gun_error:~p~n",[Reason]),
+  {noreply, State};
+
+handle_info(Info, State) ->
+  io:format("handle info:~p~n",[Info]),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -148,9 +181,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 signAuthenticationToken(Uid,Sid,PrvKey,Method,Uri) ->
-  Iat = 1544167525,%os:system_time(seconds),
+  Iat = os:system_time(seconds),
   % one hour
-  Exp = 1544267525,%os:system_time(seconds) + (1*60*60),
+  Exp = os:system_time(seconds) + (3*60*60),
   Token = [
    {jti,list_to_binary("3bacd6df-ceb0-4858-a761-3c1535b337f2")},
    {uid,list_to_binary(Uid)},
