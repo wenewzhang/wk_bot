@@ -75,7 +75,7 @@ init([]) ->
   {ok, Protocol} ->
      io:format("await_up:~p~n",[Protocol]),
      io:format("connected"),
-     {ok,Token} = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
+     Token = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
      Header = [
               {<<"'subprotocols':">>,<<"['Mixin-Blaze-1']">>},
               {<<"'header':">>,iolist_to_binary([<<"['Authorization:Bearer ">>,Token,<<"']">>])}
@@ -91,6 +91,7 @@ init([]) ->
   {error, Reason} ->
       io:format("error :~p~n",[Reason])
   end,
+  decode_python_data(?PRIVATE_KEY),
   {ok, #state{conn = ConnPid}}.
 
 %%--------------------------------------------------------------------
@@ -147,16 +148,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 signAuthenticationToken(Uid,Sid,PrvKey,Method,Uri) ->
-  Iat = 1543991345,%os:system_time(seconds),
+  Iat = 1544167525,%os:system_time(seconds),
   % one hour
-  Exp = 1544001345,%os:system_time(seconds) + (1*60*60),
+  Exp = 1544267525,%os:system_time(seconds) + (1*60*60),
   Token = [
-   {'jti',"3bacd6df-ceb0-4858-a761-3c1535b337f2"},
-   {'uid',Uid},
-   {'sig',"f837ebeb4c2981ad9c64b70d0b0d18724c76c60781b9e4bf7a582510df7ada39"},
-   {'exp',Exp},
-   {'sid',Sid},
-   {'iat',Iat}
+   {jti,list_to_binary("3bacd6df-ceb0-4858-a761-3c1535b337f2")},
+   {uid,list_to_binary(Uid)},
+   {sig,list_to_binary("f837ebeb4c2981ad9c64b70d0b0d18724c76c60781b9e4bf7a582510df7ada39")},
+   {exp,Exp},
+   {sid,list_to_binary(Sid)},
+   {iat,Iat}
    ],
       % {sig,to_hex(crypto:hash(sha256,Method ++ Uri))}
   [Entry] = public_key:pem_decode(PrvKey),
@@ -166,8 +167,10 @@ signAuthenticationToken(Uid,Sid,PrvKey,Method,Uri) ->
   % TokenB = list_to_binary(Token),
   % io:format("Token Bin:~p~n",[TokenB]),
   % io:format("rsa test:~p~n",[public_key:sign(<<"test">>,sha512,Key)]),
-  SignDt = jwt:encode(<<"RS512">>,Token,Key),
+  {ok,SignDt} = jwt:encode(<<"RS512">>,Token,Key),
   io:format("sign data:~p~n",[SignDt]),
+  Dt = jwt:decode(SignDt,Key),
+  io:format("sign data:~p~n",[Dt]),
   SignDt.
 
 to_hex([]) ->
@@ -179,3 +182,11 @@ to_hex([H|T]) ->
 
 to_digit(N) when N < 10 -> $0 + N;
 to_digit(N)             -> $a + N-10.
+
+decode_python_data(PrvKey) ->
+  Dt = <<"eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzYmFjZDZkZi1jZWIwLTQ4NTgtYTc2MS0zYzE1MzViMzM3ZjIiLCJ1aWQiOiIyMTA0MjUxOC04NWM3LTQ5MDMtYmIxOS1mMzExODEzZDFmNTEiLCJzaWciOiJmODM3ZWJlYjRjMjk4MWFkOWM2NGI3MGQwYjBkMTg3MjRjNzZjNjA3ODFiOWU0YmY3YTU4MjUxMGRmN2FkYTM5IiwiZXhwIjoxNTQ0MjY3NTI1LCJzaWQiOiI0YzZiZGExMS0zNDYwLTRiYzktOTY3My05OTZhYzM0Yjc5MDciLCJpYXQiOjE1NDQxNjc1MjV9.JiphZRWS3siHinAwphYe4rfZUHruE0Hzgou0mUWw82y_3GycCGA_HX85pnCNqt4zijRyvxcf2TeR1nbT9ab8oL5p0iZJeebBdS6nzw8J4jTgLJw7GinIgtxpJTm0OpVr5-chCP7is5t2RkLhQGDVYvfySejnkpG5PK-sv_9-UgY">>,
+  [Entry] = public_key:pem_decode(PrvKey),
+  % io:format("key:~p~n",[Entry]),
+  Key = public_key:pem_entry_decode(Entry),
+  DtN = jwt:decode(Dt,Key),
+  io:format("python:~p~n",[DtN]).
