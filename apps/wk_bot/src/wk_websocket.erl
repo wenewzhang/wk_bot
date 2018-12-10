@@ -223,28 +223,20 @@ code_change(_OldVsn, State, _Extra) ->
 
 signAuthenticationToken(Uid,Sid,PrvKey,Method,Uri) ->
   Iat = os:system_time(seconds),
-  % one hour
+  % three hour
   Exp = os:system_time(seconds) + (3*60*60),
   Token = [
-   {jti,list_to_binary("3bacd6df-ceb0-4858-a761-3c1535b337f2")},
+   {jti,list_to_binary(uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom())))},
    {uid,list_to_binary(Uid)},
-   {sig,list_to_binary("f837ebeb4c2981ad9c64b70d0b0d18724c76c60781b9e4bf7a582510df7ada39")},
+   {sig,list_to_binary(to_hex(crypto:hash(sha256,Method ++ Uri)))},
    {exp,Exp},
    {sid,list_to_binary(Sid)},
    {iat,Iat}
    ],
-      % {sig,to_hex(crypto:hash(sha256,Method ++ Uri))}
   [Entry] = public_key:pem_decode(PrvKey),
-  % io:format("key:~p~n",[Entry]),
   Key = public_key:pem_entry_decode(Entry),
-  % io:format("key:~p~n",[Key]),
-  % TokenB = list_to_binary(Token),
-  % io:format("Token Bin:~p~n",[TokenB]),
-  % io:format("rsa test:~p~n",[public_key:sign(<<"test">>,sha512,Key)]),
   {ok,SignDt} = jwt:encode(<<"RS512">>,Token,Key),
-  % io:format("sign data:~p~n",[SignDt]),
   Dt = jwt:decode(SignDt,Key),
-  % io:format("sign data:~p~n",[Dt]),
   SignDt.
 
 to_hex([]) ->
