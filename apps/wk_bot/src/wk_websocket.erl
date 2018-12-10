@@ -139,16 +139,57 @@ handle_cast(Msg, State) ->
 handle_info({gun_up,ConnPid,HttpVersion}, State) ->
   % io:format("handle info:~p~n",[Info]),
   Token = signAuthenticationToken(?CLIENT_ID,?SESSION_ID,?PRIVATE_KEY,"GET","/"),
-  Header = [{<<"Upgrade">>,<<"websocket">>},
-            {<<"Connection">>,<<"Upgrade">>},
-            {<<"Sec-WebSocket-Key">>,<<"Q+0VrkMrRk/ymTOLNcc9xw==">>},
-            {<<"Sec-WebSocket-Protocol">>,<<"Mixin-Blaze-1">>},
-            {<<"Sec-WebSocket-Version">>,<<"13">>},
+  % Token = <<"eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzYmFjZDZkZi1jZWIwLTQ4NTgtYTc2MS0zYzE1MzViMzM3ZjIiLCJ1aWQiOiIyMTA0MjUxOC04NWM3LTQ5MDMtYmIxOS1mMzExODEzZDFmNTEiLCJzaWciOiJmODM3ZWJlYjRjMjk4MWFkOWM2NGI3MGQwYjBkMTg3MjRjNzZjNjA3ODFiOWU0YmY3YTU4MjUxMGRmN2FkYTM5IiwiZXhwIjoxNTQ0MzQyMTI2LCJzaWQiOiI0YzZiZGExMS0zNDYwLTRiYzktOTY3My05OTZhYzM0Yjc5MDciLCJpYXQiOjE1NDQzMzEzMjZ9.Ua3OjojMaCVcUFQKIyG9jz7NLGSeC3LGtDnwCoS3BMBVslGk-qAvM3S2Je4YQKJHqti3KLn_3NKyQJ1_ohl5x88WbzYlO33eFG8ChnEhgvwl68lhq6qGDTJy4Ui20D32EllxGsfw1BnuElXSDpMhprXJkzRMEmNsF_tjacUlmlI">>,
+  Header = [{<<"Sec-WebSocket-Protocol">>,<<"Mixin-Blaze-1">>},
             {<<"Authorization">>,iolist_to_binary([<<"Bearer ">>,Token])}],
   io:format("Header:~p HttpVersion:~p~n",[Header,HttpVersion]),
-  % SteamRef = gun:get(ConnPid,"/",Header),
+  Key = cow_ws:key(),
+  Headers = [
+    {<<"Connection">>, <<"Upgrade">>},
+    {<<"Upgrade">>, <<"websocket">>},
+    {<<"Sec-websocket-version">>, <<"13">>},
+    {<<"Sec-websocket-key">>, Key}
+    |Header
+  ],
+  % SteamRef = gun:get(ConnPid,"/",Headers),
   gun:ws_upgrade(ConnPid, "/",Header),
   {noreply, State#state{conn = ConnPid}};
+
+handle_info({gun_upgrade, ConnPid, _StreamRef, _Websocket, _}, State) ->
+  Msg = io_lib:format(?PTL_LIST_PENDING_MESSAGES,[uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))]),
+  % Msg = ["id",uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))},{"action","LIST_PENDING_MESSAGES"}],
+  io:format("msg ~p~n",[Msg]),
+  MsgB = zlib:gzip(iolist_to_binary(Msg)),
+  io:format("msg b:~p~n",[MsgB]),
+  gun:ws_send(ConnPid, MsgB),
+  {noreply, State};
+
+handle_info({gun_response, _ConnPid, _StreamRef, Nofin,StatCode,_Meta}, #state{conn = ConnPid} = State) when Nofin =:= nofin andalso StatCode =:= 200 ->
+  % Msg = <<"id:b2efacbd-fba9-11e8-bd49-20c9d08850cd","action:LIST_PENDING_MESSAGES">>,
+  % % uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))/binary
+  % % Msg = ["id",uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))},{"action","LIST_PENDING_MESSAGES"}],
+  % io:format("msg ~p~n",[Msg]),
+  % MsgB = zlib:gzip(iolist_to_binary(Msg)),
+  % io:format("msg b:~p~n",[MsgB]),
+  % gun:ws_send(ConnPid, MsgB),
+  % gun:ws_upgrade(ConnPid, "/"),
+  io:format("gun_response"),
+  {noreply, State};
+
+handle_info({gun_inform,_ConPid,_StreamRef,StateCode,_CDN},#state{conn = ConnPid} = State) when StateCode =:= 101 ->
+  io:format("send action "),
+  % Msg = io_lib:format(?PTL_LIST_PENDING_MESSAGES,[uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))]),
+  % % Msg = ["id",uuid:uuid_to_string(uuid:get_v5(uuid:get_v4_urandom()))},{"action","LIST_PENDING_MESSAGES"}],
+  % io:format("msg ~p~n",[Msg]),
+  % MsgB = zlib:gzip(iolist_to_binary(Msg)),
+  % io:format("msg b:~p~n",[MsgB]),
+  % gun:ws_send(ConnPid, MsgB),
+  % gun:ws_upgrade(ConnPid, "/",[],#{compress => true}),
+  {noreply, State};
+handle_info({gun_data,_,_,Fin,Meta},#state{conn = ConnPid} = State) when Fin =:= fin ->
+  io:format("gun_data:~p~n",[Meta]),
+  % gun:ws_upgrade(ConnPid, "/"),
+  {noreply, State};
 
 handle_info({gun_error,_,_,Reason},State) ->
   io:format("gun_error:~p~n",[Reason]),
@@ -194,16 +235,16 @@ signAuthenticationToken(Uid,Sid,PrvKey,Method,Uri) ->
    ],
       % {sig,to_hex(crypto:hash(sha256,Method ++ Uri))}
   [Entry] = public_key:pem_decode(PrvKey),
-  io:format("key:~p~n",[Entry]),
+  % io:format("key:~p~n",[Entry]),
   Key = public_key:pem_entry_decode(Entry),
-  io:format("key:~p~n",[Key]),
+  % io:format("key:~p~n",[Key]),
   % TokenB = list_to_binary(Token),
   % io:format("Token Bin:~p~n",[TokenB]),
   % io:format("rsa test:~p~n",[public_key:sign(<<"test">>,sha512,Key)]),
   {ok,SignDt} = jwt:encode(<<"RS512">>,Token,Key),
-  io:format("sign data:~p~n",[SignDt]),
+  % io:format("sign data:~p~n",[SignDt]),
   Dt = jwt:decode(SignDt,Key),
-  io:format("sign data:~p~n",[Dt]),
+  % io:format("sign data:~p~n",[Dt]),
   SignDt.
 
 to_hex([]) ->
